@@ -10,7 +10,12 @@ Everything runs in your browser. Photos are never uploaded anywhere, and the app
 
 ## Contents
 
-1. [Quick start](#quick-start)
+1. [Quick start guide](#quick-start-guide)
+   - [The basics](#the-basics)
+   - [Example 1: Scoring one experiment in a single session](#example-1-scoring-one-experiment-in-a-single-session)
+   - [Example 2: Fixing a dish you already saved](#example-2-fixing-a-dish-you-already-saved)
+   - [Example 3: A batch with unusual lighting](#example-3-a-batch-with-unusual-lighting)
+   - [Example 4: Converting iPhone photos on a Mac](#example-4-converting-iphone-photos-on-a-mac)
 2. [Taking good photos](#taking-good-photos)
 3. [Reading the markers](#reading-the-markers)
 4. [Correcting the results](#correcting-the-results)
@@ -18,14 +23,15 @@ Everything runs in your browser. Photos are never uploaded anywhere, and the app
 6. [Detection settings](#detection-settings)
 7. [Saving, reloading, and exporting](#saving-reloading-and-exporting)
 8. [Where your files are saved](#where-your-files-are-saved)
-9. [Example workflows](#example-workflows)
-10. [File formats](#file-formats)
-11. [Troubleshooting](#troubleshooting)
-12. [Hosting your own copy](#hosting-your-own-copy)
+9. [File formats](#file-formats)
+10. [Troubleshooting](#troubleshooting)
+11. [Hosting your own copy](#hosting-your-own-copy)
 
 ---
 
-## Quick start
+## Quick start guide
+
+### The basics
 
 1. Open the app and tap **Load photo**. Choose a photo of one petri dish (JPG, PNG, or HEIC).
 2. The app detects the seeds and shows the germination percentage on the right (below the photo on phones).
@@ -34,6 +40,63 @@ Everything runs in your browser. Photos are never uploaded anywhere, and the app
 5. Repeat for each dish, then tap **Export CSV** to download all results.
 
 To try the app without your own photo, tap **Use the sample dish**.
+
+The examples below show common real-world workflows step by step. The rest of this README is a reference for each feature.
+
+### Example 1: Scoring one experiment in a single session
+
+You have 12 dishes photographed on day 5, named `T1_rep1.jpg` through `T4_rep3.jpg`.
+
+1. Put all 12 photos in one folder, for example `Germination/Day5/`.
+2. Load `T1_rep1.jpg`. If the dish is off-center, use **Adjust dish** first.
+3. Correct any wrong markers, then tap **Save this dish**.
+4. Move `T1_rep1.marks.json` from Downloads into `Germination/Day5/`, or set your browser to ask where to save.
+5. Repeat for the other 11 photos.
+6. Tap **Export CSV** and save it as `Germination/Day5/results.csv`.
+7. Tap **Clear table** so the next experiment starts fresh.
+
+Your folder ends up looking like this:
+
+```
+Germination/Day5/
+├── T1_rep1.jpg
+├── T1_rep1.marks.json
+├── T1_rep2.jpg
+├── T1_rep2.marks.json
+│   ...
+├── T4_rep3.jpg
+├── T4_rep3.marks.json
+└── results.csv
+```
+
+### Example 2: Fixing a dish you already saved
+
+A colleague spots a miscounted seed in `T2_rep1.jpg`.
+
+1. Tap **Load photo** and select both `T2_rep1.jpg` and `T2_rep1.marks.json`.
+2. Your earlier marks reappear. Fix the seed.
+3. Tap **Save this dish**. The row for `T2_rep1.jpg` is updated and a new marks file is downloaded. Replace the old marks file with the new one. Some browsers add a number to the name, such as `T2_rep1.marks (1).json`, so rename it if needed.
+4. Tap **Export CSV** again for an updated results file.
+
+### Example 3: A batch with unusual lighting
+
+The day 2 photos were taken under different lights, and many seed coats are missed.
+
+1. Load the first photo and tick **Show detected pixels**.
+2. Raise **Seed coat darkness** until the seed coats turn fully red without picking up shadows.
+3. Check the second and third photos with the same settings.
+4. Correct and save each dish as usual. The settings are stored in every marks file, so reloading a dish later brings back the right settings.
+
+### Example 4: Converting iPhone photos on a Mac
+
+The app opens HEIC photos directly, but converting first makes loading faster. In Terminal, inside the folder of photos:
+
+```bash
+mkdir -p jpg
+for f in *.HEIC *.heic; do [ -e "$f" ] && sips -s format jpeg -s formatOptions 90 "$f" --out "jpg/${f%.*}.jpg"; done
+```
+
+This writes JPG copies into a `jpg` subfolder and leaves the originals untouched. To stop the iPhone from saving HEIC in the first place, go to **Settings → Camera → Formats → Most Compatible**.
 
 ---
 
@@ -185,65 +248,6 @@ To collect results from several people, have each person export their CSV and pu
 
 ---
 
-## Example workflows
-
-### Example 1: Scoring one experiment in a single session
-
-You have 12 dishes photographed on day 5, named `T1_rep1.jpg` through `T4_rep3.jpg`.
-
-1. Put all 12 photos in one folder, for example `Germination/Day5/`.
-2. Load `T1_rep1.jpg`. If the dish is off-center, use **Adjust dish** first.
-3. Correct any wrong markers, then tap **Save this dish**.
-4. Move `T1_rep1.marks.json` from Downloads into `Germination/Day5/`, or set your browser to ask where to save.
-5. Repeat for the other 11 photos.
-6. Tap **Export CSV** and save it as `Germination/Day5/results.csv`.
-7. Tap **Clear table** so the next experiment starts fresh.
-
-Your folder ends up looking like this:
-
-```
-Germination/Day5/
-├── T1_rep1.jpg
-├── T1_rep1.marks.json
-├── T1_rep2.jpg
-├── T1_rep2.marks.json
-│   ...
-├── T4_rep3.jpg
-├── T4_rep3.marks.json
-└── results.csv
-```
-
-### Example 2: Fixing a dish you already saved
-
-A colleague spots a miscounted seed in `T2_rep1.jpg`.
-
-1. Tap **Load photo** and select both `T2_rep1.jpg` and `T2_rep1.marks.json`.
-2. Your earlier marks reappear. Fix the seed.
-3. Tap **Save this dish**. The row for `T2_rep1.jpg` is updated and a new marks file is downloaded. Replace the old marks file with the new one. Some browsers add a number to the name, such as `T2_rep1.marks (1).json`, so rename it if needed.
-4. Tap **Export CSV** again for an updated results file.
-
-### Example 3: A batch with unusual lighting
-
-The day 2 photos were taken under different lights, and many seed coats are missed.
-
-1. Load the first photo and tick **Show detected pixels**.
-2. Raise **Seed coat darkness** until the seed coats turn fully red without picking up shadows.
-3. Check the second and third photos with the same settings.
-4. Correct and save each dish as usual. The settings are stored in every marks file, so reloading a dish later brings back the right settings.
-
-### Example 4: Converting iPhone photos on a Mac
-
-The app opens HEIC photos directly, but converting first makes loading faster. In Terminal, inside the folder of photos:
-
-```bash
-mkdir -p jpg
-for f in *.HEIC *.heic; do [ -e "$f" ] && sips -s format jpeg -s formatOptions 90 "$f" --out "jpg/${f%.*}.jpg"; done
-```
-
-This writes JPG copies into a `jpg` subfolder and leaves the originals untouched. To stop the iPhone from saving HEIC in the first place, go to **Settings → Camera → Formats → Most Compatible**.
-
----
-
 ## File formats
 
 ### Results CSV
@@ -310,7 +314,7 @@ Marks files are plain text and can be read in Python or R for your own analysis.
 | Problem | What to do |
 |---|---|
 | "That file could not be opened as an image" | Use a JPG, PNG, or HEIC photo. Other formats (TIFF, RAW) need converting first. |
-| HEIC photo will not convert | The converter downloads the first time you load a HEIC photo, so you need an internet connection. If it still fails, convert the photo to JPG (see Example 4). |
+| HEIC photo will not convert | The converter downloads the first time you load a HEIC photo, so you need an internet connection. If it still fails, convert the photo to JPG (see [Example 4](#example-4-converting-iphone-photos-on-a-mac)). |
 | Text, a ruler, or the dish rim is counted as seeds | Use **Adjust dish** to shrink the circle so it covers only the inside of the dish. Mark any remaining false detections as **Misdetection**. |
 | Many seed coats are missed | Raise **Seed coat darkness**. Tick **Show detected pixels** to check. |
 | One seedling is counted twice (coat and cotyledon separately) | Raise **Seed coat to cotyledon link**. |
