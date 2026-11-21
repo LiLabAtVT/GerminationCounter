@@ -30,6 +30,10 @@ h1{font-size:1.15rem;margin:0 0 2px;font-weight:700}
 .layout{display:grid;gap:18px}
 @media (min-width:860px){.layout{grid-template-columns:minmax(0,1fr) 300px;align-items:start}.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}}
 .loadrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.namerow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+.namerow label{font-weight:700;font-size:.92rem}
+.namerow input{flex:1;min-width:180px;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);min-height:42px}
+.namerow input:disabled{opacity:.6}
 button,.btn{font:inherit;font-size:.95rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:9px 14px;cursor:pointer;min-height:42px}
 .btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink);font-weight:700}
 button:focus-visible,.btn:focus-within,input:focus-visible,summary:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
@@ -90,9 +94,14 @@ td button{min-height:30px;padding:2px 8px;font-size:.8rem}
   <div class="layout">
     <section aria-label="Dish image">
       <div class="loadrow">
-        <label class="btn primary">Load photo<input id="file" type="file" accept="image/*,.heic,.heif,.json" multiple></label>
-        <label class="btn">Load marks<input id="marks" type="file" accept=".json,application/json"></label>
+        <label class="btn primary">Load photo<input id="file" type="file" accept="image/*,.heic,.heif"></label>
+        <label class="btn">Load results CSV<input id="csvin" type="file" accept=".csv,text/csv"></label>
         <button id="sample" type="button">Use the sample dish</button>
+      </div>
+      <div class="namerow">
+        <label for="imgname">Photo name</label>
+        <input id="imgname" type="text" placeholder="Load a photo first" disabled autocomplete="off" spellcheck="false">
+        <button id="restore" type="button" hidden>Restore saved marks</button>
       </div>
       <p class="hint" id="status" aria-live="polite" style="margin:0 0 10px"></p>
       <div class="stage" id="stage">
@@ -131,7 +140,7 @@ td button{min-height:30px;padding:2px 8px;font-size:.8rem}
       </div>
       <section class="table-card" aria-labelledby="tt">
         <h2 id="tt">Results table</h2>
-        <p class="note">Saving a dish adds or updates its row here and downloads a marks file you can load back later. The table is kept in this browser.</p>
+        <p class="note">Saving a dish adds or updates its row under the photo name, including where every marker is. Export the CSV to keep your work; loading it back restores the table and the marks.</p>
         <div class="tw"><table><thead><tr><th>Image</th><th>Germ.</th><th>Unsure</th><th>Not</th><th>%</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
         <p class="note" id="norows" style="margin:8px 0 0">No dishes saved yet.</p>
         <div class="tbtns"><button type="button" id="csv">Export CSV</button><button type="button" id="clear">Clear table</button></div>
@@ -274,7 +283,7 @@ const SAMPLE='data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAY
 const $ = id => document.getElementById(id);
 const cv = $('cv'), ctx = cv.getContext('2d');
 const base = document.createElement('canvas'), bctx = base.getContext('2d', { willReadFrequently: true });
-let imgName = '', P = { ...DEFAULTS }, W = 0, H = 0, img = null, roi = null, seeds = [], cls = null, req = 6, tool = 'cycle', zoom = 1, maskImg = null;
+let srcFile = '', P = { ...DEFAULTS }, W = 0, H = 0, img = null, roi = null, seeds = [], cls = null, req = 6, tool = 'cycle', zoom = 1, maskImg = null;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const fmt = { dark: v => v, yellow: v => v, root: v => v, link: v => (+v).toFixed(1).replace(/\.0$/, '') + '×', rootLen: v => (+v).toFixed(2).replace(/\.?0+$/, '') + '×', unsureFrac: v => Math.round(v * 100) + '%' };
 const keys = ['dark', 'yellow', 'root', 'link', 'rootLen', 'unsureFrac'];
@@ -294,8 +303,12 @@ function loadSrc(src, name, after) {
     img = bctx.getImageData(0, 0, W, H);
     roi = { cx: W / 2, cy: H / 2, r: Math.min(W, H) / 2 * 0.93 };
     $('empty').hidden = true; cv.hidden = false;
-    imgName = name || 'image'; $('save').disabled = false; $('savestatus').textContent = '';
-    detect(); if (after) after();
+    srcFile = name || 'image'; $('save').disabled = false; $('savestatus').textContent = '';
+    const nm = $('imgname'); nm.disabled = false; nm.value = srcFile;
+    detect();
+    const row = rows.find(r => r.image === srcFile && r.marks) || rows.find(r => r.source_file === srcFile && r.marks);
+    if (row) { applyRow(row); nm.value = row.image; $('status').textContent = 'Restored the saved marks for ' + row.image + '.'; }
+    updateRestore();
   };
   im.onerror = () => { $('status').textContent = 'That file could not be opened as an image. Try a JPG, PNG or HEIC photo.'; };
   im.src = src;
@@ -311,14 +324,9 @@ function loadHeicLib() {
   return heicLib;
 }
 const isHeic = f => /image\/hei[cf]/i.test(f.type) || /\.hei[cf]$/i.test(f.name);
-const readJson = file => file.text().then(t => JSON.parse(t));
 $('file').onchange = async e => {
-  const list = [...e.target.files]; e.target.value = '';
-  const f = list.find(x => !/\.json$/i.test(x.name)); const mf = list.find(x => /\.json$/i.test(x.name));
-  const status = $('status');
-  let after = null;
-  if (mf) { try { const m = await readJson(mf); after = () => applyMarks(m); } catch (err) { status.textContent = mf.name + ' is not a valid marks file.'; } }
-  if (!f) { if (after) { if (img) after(); else status.textContent = 'Choose the photo together with its marks file, or load the photo first.'; } return; }
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  const status = $('status'); const after = null;
   if (!isHeic(f)) { status.textContent = ''; loadSrc(URL.createObjectURL(f), f.name, after); return; }
   // Safari can read HEIC itself; try that first
   const nativeOk = await new Promise(res => { const t = new Image(); const u = URL.createObjectURL(f); t.onload = () => res(u); t.onerror = () => res(null); t.src = u; });
@@ -335,20 +343,28 @@ $('file').onchange = async e => {
   }
 };
 $('sample').onclick = () => loadSrc(SAMPLE, 'sample-dish.jpg');
-$('marks').onchange = async e => {
-  const mf = e.target.files[0]; e.target.value = ''; if (!mf) return;
-  try { applyMarks(await readJson(mf)); } catch (err) { $('status').textContent = mf.name + ' is not a valid marks file.'; }
-};
-function applyMarks(m) {
-  if (!m || !Array.isArray(m.seeds) || !m.dish) { $('status').textContent = 'That file is not a germination counter marks file.'; return; }
-  if (!img) { $('status').textContent = 'Load the photo first, then its marks file.'; return; }
-  P = { ...DEFAULTS, ...(m.settings || {}) }; syncSliders();
-  roi = { cx: m.dish.cx * W, cy: m.dish.cy * H, r: m.dish.r * W };
+// ---- compact marks: positions in thousandths of image width/height ----
+const k1000 = (v, d) => Math.round(v / d * 1000);
+function encodeDish() { return [k1000(roi.cx, W), k1000(roi.cy, H), k1000(roi.r, W)].join(':'); }
+function encodeMarks() { return seeds.map(s => s.cat + (s.n > 1 ? s.n + '@' : '') + k1000(s.x, W) + ':' + k1000(s.y, H)).join(';'); }
+function applyRow(row) {
+  const d = String(row.dish || '').split(':').map(Number);
+  if (d.length === 3 && d.every(v => isFinite(v))) roi = { cx: d[0] / 1000 * W, cy: d[1] / 1000 * H, r: d[2] / 1000 * W };
   detect();
-  seeds = m.seeds.map(s => ({ x: s.x * W, y: s.y * H, n: s.n || 1, cat: ['g', 'u', 'n', 'x'].includes(s.cat) ? s.cat : 'n' }));
-  render(); stats();
-  $('status').textContent = m.image && m.image !== imgName ? `Marks saved for ${m.image} were applied to ${imgName}.` : `Marks loaded for ${imgName}.`;
+  const out = [];
+  for (const t of String(row.marks || '').split(';')) {
+    const m = /^\s*([gunx])(?:(\d+)@)?(\d+):(\d+)\s*$/.exec(t); if (!m) continue;
+    out.push({ cat: m[1], n: m[2] ? +m[2] : 1, x: +m[3] / 1000 * W, y: +m[4] / 1000 * H });
+  }
+  seeds = out; render(); stats(); updateRestore();
 }
+function currentName() { return $('imgname').value.trim() || srcFile; }
+function updateRestore() {
+  const r = img && rows.find(x => x.image === currentName() && x.marks);
+  $('restore').hidden = !r;
+}
+$('imgname').addEventListener('input', updateRestore);
+$('restore').onclick = () => { const r = rows.find(x => x.image === currentName() && x.marks); if (r) { applyRow(r); $('status').textContent = 'Restored the saved marks for ' + r.image + '.'; } };
 const baseName = n => n.replace(/\.[^.]+$/, '');
 async function saveFile(name, text) {
   if (window.claude && typeof window.claude.use === 'function') {
@@ -372,21 +388,46 @@ function renderRows() {
   $('norows').hidden = rows.length > 0;
 }
 renderRows();
-$('save').onclick = async () => {
+$('save').onclick = () => {
   if (!img) return;
+  const name = currentName(); $('imgname').value = name;
   const c = counts(), t = c.g + c.u + c.n, pc = v => t ? +(v / t * 100).toFixed(1) : 0;
-  const row = { image: imgName, germinated: c.g, unsure: c.u, not_germinated: c.n, total_seeds: t, misdetections: c.x,
-    germination_percent: pc(c.g), germination_percent_unsure_as_germinated: pc(c.g + c.u), saved_at: new Date().toISOString() };
-  const k = rows.findIndex(r => r.image === imgName); if (k >= 0) rows[k] = row; else rows.push(row);
-  persist(); renderRows();
-  const marks = { app: 'germination-counter', version: 1, image: imgName, saved_at: row.saved_at, width: W, height: H,
-    dish: { cx: +(roi.cx / W).toFixed(5), cy: +(roi.cy / H).toFixed(5), r: +(roi.r / W).toFixed(5) }, settings: P,
-    counts: { germinated: c.g, unsure: c.u, not_germinated: c.n, misdetections: c.x },
-    seeds: seeds.map(s => ({ x: +(s.x / W).toFixed(5), y: +(s.y / H).toFixed(5), n: s.n, cat: s.cat })) };
-  const res = await saveFile(baseName(imgName) + '.marks.json', JSON.stringify(marks, null, 1));
-  $('savestatus').textContent = res === 'declined' ? `Added ${imgName} to the table. The marks file was not downloaded.` : `Added ${imgName} to the table and downloaded its marks file.`;
+  const row = { image: name, germinated: c.g, unsure: c.u, not_germinated: c.n, total_seeds: t, misdetections: c.x,
+    germination_percent: pc(c.g), germination_percent_unsure_as_germinated: pc(c.g + c.u), saved_at: new Date().toISOString(),
+    source_file: srcFile, dish: encodeDish(), marks: encodeMarks() };
+  const k = rows.findIndex(r => r.image === name); if (k >= 0) rows[k] = row; else rows.push(row);
+  persist(); renderRows(); updateRestore();
+  $('savestatus').textContent = (k >= 0 ? 'Updated ' : 'Added ') + name + (k >= 0 ? ' in the table.' : ' to the table.');
 };
-const COLS = ['image', 'germinated', 'unsure', 'not_germinated', 'total_seeds', 'misdetections', 'germination_percent', 'germination_percent_unsure_as_germinated', 'saved_at'];
+const COLS = ['image', 'germinated', 'unsure', 'not_germinated', 'total_seeds', 'misdetections', 'germination_percent', 'germination_percent_unsure_as_germinated', 'saved_at', 'source_file', 'dish', 'marks'];
+const NUMS = new Set(['germinated', 'unsure', 'not_germinated', 'total_seeds', 'misdetections', 'germination_percent', 'germination_percent_unsure_as_germinated']);
+function parseCsv(text) {
+  const out = []; let row = [], cell = '', q = false;
+  text = text.replace(/^\uFEFF/, '');
+  for (let i = 0; i < text.length; i++) { const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+    else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cell); out.push(row); row = []; cell = ''; }
+    else cell += ch; }
+  if (cell !== '' || row.length) { row.push(cell); out.push(row); }
+  return out.filter(r => r.some(c => c.trim() !== ''));
+}
+$('csvin').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const recs = parseCsv(await f.text()); const head = (recs.shift() || []).map(s => s.trim().toLowerCase());
+    const ix = head.indexOf('image'); if (ix < 0) throw new Error('no image column');
+    let added = 0, updated = 0, withMarks = 0;
+    for (const rec of recs) {
+      const r = {}; head.forEach((k, j) => { if (COLS.includes(k)) { const v = (rec[j] ?? '').trim(); r[k] = NUMS.has(k) && v !== '' && isFinite(+v) ? +v : v; } });
+      if (!r.image) continue; if (r.marks) withMarks++;
+      const k = rows.findIndex(x => x.image === r.image); if (k >= 0) { rows[k] = r; updated++; } else { rows.push(r); added++; }
+    }
+    persist(); renderRows(); updateRestore();
+    $('status').textContent = `Loaded ${f.name}: ${added} new rows, ${updated} updated, ${withMarks} with saved marks. Load a photo with a matching name to see its marks.`;
+  } catch (err) { $('status').textContent = f.name + ' is not a results CSV from this app (it needs an image column).'; }
+};
 const csvCell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
 $('csv').onclick = () => {
   if (!rows.length) { $('savestatus').textContent = 'Save at least one dish before exporting.'; return; }
